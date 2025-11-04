@@ -11,6 +11,7 @@ Windows 다중 모니터 환경에서 프로그램을 특정 모니터에서 실
 
 ## 주요 파일 구조
 
+~~~
 MonitorLauncher/
 ├── MonitorLauncher.csproj  # 프로젝트 파일
 ├── app.manifest            # 관리자 권한 요구 설정
@@ -20,6 +21,7 @@ MonitorLauncher/
 ├── WindowController.cs     # 창 위치 제어 로직
 ├── Profile.cs              # 프로필 저장/로드
 └── README.md               # 문서
+~~~
 
 ## 요구사항
 
