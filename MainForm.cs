@@ -138,7 +138,7 @@ namespace MonitorLauncher
                 Size = new Size(controlWidth, 23),
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
-            cmbWindowState.Items.AddRange(new[] { "최대화", "일반 크기", "복원" });
+            cmbWindowState.Items.AddRange(new[] { "전체화면", "창모드", "복원" });
             cmbWindowState.SelectedIndex = 0;
             this.Controls.Add(cmbWindowState);
 
