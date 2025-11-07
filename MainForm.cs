@@ -266,7 +266,8 @@ namespace MonitorLauncher
 
         private void CmbMonitors_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            AdjustWindowToSelectedMonitor();
+            // 모니터 선택 변경 시 창을 자동으로 이동하지 않음
+            // (사용자가 창을 수동으로 이동한 경우를 고려)
         }
 
         private void AdjustWindowToSelectedMonitor()
