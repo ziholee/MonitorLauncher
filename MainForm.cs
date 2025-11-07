@@ -278,10 +278,10 @@ namespace MonitorLauncher
             var targetScreen = Screen.AllScreens[cmbMonitors.SelectedIndex];
             var windowState = cmbWindowState.SelectedIndex switch
             {
-                0 => WindowState.Maximized,
-                1 => WindowState.Normal,
-                2 => WindowState.Restore,
-                _ => WindowState.Maximized
+                0 => AppWindowState.Maximized,
+                1 => AppWindowState.Normal,
+                2 => AppWindowState.Restore,
+                _ => AppWindowState.Maximized
             };
 
             btnLaunch!.Enabled = false;
@@ -362,9 +362,9 @@ namespace MonitorLauncher
             if (cmbWindowState != null)
                 cmbWindowState.SelectedIndex = profile.WindowState switch
                 {
-                    WindowState.Maximized => 0,
-                    WindowState.Normal => 1,
-                    WindowState.Restore => 2,
+                    AppWindowState.Maximized => 0,
+                    AppWindowState.Normal => 1,
+                    AppWindowState.Restore => 2,
                     _ => 0
                 };
 
@@ -483,10 +483,10 @@ namespace MonitorLauncher
                     MonitorDeviceName = targetScreen.DeviceName,
                     WindowState = cmbWindowState.SelectedIndex switch
                     {
-                        0 => WindowState.Maximized,
-                        1 => WindowState.Normal,
-                        2 => WindowState.Restore,
-                        _ => WindowState.Maximized
+                        0 => AppWindowState.Maximized,
+                        1 => AppWindowState.Normal,
+                        2 => AppWindowState.Restore,
+                        _ => AppWindowState.Maximized
                     }
                 };
 

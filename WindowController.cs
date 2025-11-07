@@ -10,7 +10,7 @@ namespace MonitorLauncher
 {
     public class WindowController
     {
-        public static async Task<bool> MoveWindowToMonitor(Process process, Screen targetScreen, WindowState windowState = WindowState.Maximized)
+        public static async Task<bool> MoveWindowToMonitor(Process process, Screen targetScreen, AppWindowState windowState = AppWindowState.Maximized)
         {
             if (process == null || process.HasExited)
                 return false;
@@ -53,7 +53,7 @@ namespace MonitorLauncher
 
             switch (windowState)
             {
-                case WindowState.Maximized:
+                case AppWindowState.Maximized:
                     // 먼저 모니터로 이동한 후 최대화
                     success = Win32Api.SetWindowPos(mainWindowHandle, Win32Api.HWND_TOP,
                         bounds.X, bounds.Y, bounds.Width, bounds.Height,
@@ -65,7 +65,7 @@ namespace MonitorLauncher
                     }
                     break;
 
-                case WindowState.Normal:
+                case AppWindowState.Normal:
                     success = Win32Api.SetWindowPos(mainWindowHandle, Win32Api.HWND_TOP,
                         bounds.X, bounds.Y, bounds.Width, bounds.Height,
                         Win32Api.SWP_SHOWWINDOW);
@@ -76,7 +76,7 @@ namespace MonitorLauncher
                     }
                     break;
 
-                case WindowState.Restore:
+                case AppWindowState.Restore:
                     Win32Api.ShowWindow(mainWindowHandle, Win32Api.SW_RESTORE);
                     success = Win32Api.SetWindowPos(mainWindowHandle, Win32Api.HWND_TOP,
                         bounds.X, bounds.Y, 0, 0,
@@ -126,7 +126,7 @@ namespace MonitorLauncher
         }
     }
 
-    public enum WindowState
+    public enum AppWindowState
     {
         Normal,
         Maximized,
