@@ -24,22 +24,27 @@ namespace MonitorLauncher
         private Label? lblStatus;
         private List<Profile> profiles = new List<Profile>();
         private string profilesFilePath = Profile.GetProfilesFilePath();
+        private NotifyIcon? trayIcon;
+        private ContextMenuStrip? trayMenu;
 
         public MainForm()
         {
             InitializeComponent();
+            InitializeTrayIcon();
             LoadProfiles();
             RefreshMonitorList();
             RefreshProfileList();
+            AdjustWindowToSelectedMonitor();
         }
 
         private void InitializeComponent()
         {
-            this.Text = "Monitor Launcher v1.0";
+            this.Text = "Monitor Launcher v1.1";
             this.Size = new Size(600, 550);
-            this.StartPosition = FormStartPosition.CenterScreen;
+            this.StartPosition = FormStartPosition.Manual;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
+            this.Resize += MainForm_Resize;
 
             int yPos = 20;
             int labelWidth = 120;
@@ -62,6 +67,7 @@ namespace MonitorLauncher
                 Size = new Size(controlWidth - 50, 23),
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
+            cmbMonitors.SelectedIndexChanged += CmbMonitors_SelectedIndexChanged;
             this.Controls.Add(cmbMonitors);
 
             btnRefreshMonitors = new Button
@@ -218,18 +224,77 @@ namespace MonitorLauncher
         {
             if (cmbMonitors == null) return;
 
+            int currentSelection = cmbMonitors.SelectedIndex;
             cmbMonitors.Items.Clear();
             var screens = Screen.AllScreens;
+            int primaryIndex = -1;
 
-            foreach (var screen in screens)
+            for (int i = 0; i < screens.Length; i++)
             {
-                string displayName = screen.Primary ? $"{screen.DeviceName} (Primary) - {screen.Bounds.Width}x{screen.Bounds.Height}"
-                    : $"{screen.DeviceName} - {screen.Bounds.Width}x{screen.Bounds.Height}";
+                var screen = screens[i];
+                string displayName;
+                
+                if (screen.Primary)
+                {
+                    displayName = $"모니터 {i + 1} (기본) - {screen.Bounds.Width}x{screen.Bounds.Height}";
+                    primaryIndex = i;
+                }
+                else
+                {
+                    displayName = $"모니터 {i + 1} - {screen.Bounds.Width}x{screen.Bounds.Height}";
+                }
+                
                 cmbMonitors.Items.Add(displayName);
             }
 
-            if (cmbMonitors.Items.Count > 0)
+            // 기본 모니터(Primary)를 기본 선택으로 설정
+            if (primaryIndex >= 0 && currentSelection < 0)
+            {
+                cmbMonitors.SelectedIndex = primaryIndex;
+            }
+            else if (currentSelection >= 0 && currentSelection < cmbMonitors.Items.Count)
+            {
+                // 기존 선택 유지
+                cmbMonitors.SelectedIndex = currentSelection;
+            }
+            else if (cmbMonitors.Items.Count > 0)
+            {
+                // Primary 모니터를 찾지 못한 경우 첫 번째 모니터 선택
                 cmbMonitors.SelectedIndex = 0;
+            }
+        }
+
+        private void CmbMonitors_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            AdjustWindowToSelectedMonitor();
+        }
+
+        private void AdjustWindowToSelectedMonitor()
+        {
+            if (cmbMonitors == null || cmbMonitors.SelectedIndex < 0)
+                return;
+
+            var screens = Screen.AllScreens;
+            if (cmbMonitors.SelectedIndex >= screens.Length)
+                return;
+
+            var selectedScreen = screens[cmbMonitors.SelectedIndex];
+            var screenBounds = selectedScreen.Bounds;
+
+            // 창 크기를 모니터 해상도에 맞게 조정 (최대 80% 크기, 최소 크기 유지)
+            int maxWidth = Math.Min(screenBounds.Width * 80 / 100, 800);
+            int maxHeight = Math.Min(screenBounds.Height * 80 / 100, 700);
+            
+            // 최소 크기 보장
+            int windowWidth = Math.Max(maxWidth, 600);
+            int windowHeight = Math.Max(maxHeight, 550);
+
+            // 창을 모니터 중앙에 배치
+            int windowX = screenBounds.X + (screenBounds.Width - windowWidth) / 2;
+            int windowY = screenBounds.Y + (screenBounds.Height - windowHeight) / 2;
+
+            this.Size = new Size(windowWidth, windowHeight);
+            this.Location = new Point(windowX, windowY);
         }
 
         private void BtnRefreshMonitors_Click(object? sender, EventArgs e)
@@ -544,6 +609,102 @@ namespace MonitorLauncher
                 lblStatus.Refresh();
             }
         }
+
+        private void InitializeTrayIcon()
+        {
+            trayMenu = new ContextMenuStrip();
+            var showMenuItem = new ToolStripMenuItem("표시");
+            showMenuItem.Click += ShowMenuItem_Click;
+            trayMenu.Items.Add(showMenuItem);
+
+            var exitMenuItem = new ToolStripMenuItem("종료");
+            exitMenuItem.Click += ExitMenuItem_Click;
+            trayMenu.Items.Add(exitMenuItem);
+
+            trayIcon = new NotifyIcon
+            {
+                Icon = SystemIcons.Application,
+                ContextMenuStrip = trayMenu,
+                Text = "Monitor Launcher",
+                Visible = true
+            };
+
+            trayIcon.DoubleClick += TrayIcon_DoubleClick;
+            this.FormClosing += MainForm_FormClosing;
+        }
+
+        private void MainForm_Resize(object? sender, EventArgs e)
+        {
+            if (this.WindowState == FormWindowState.Minimized)
+            {
+                this.Hide();
+                if (trayIcon != null)
+                    trayIcon.ShowBalloonTip(2000, "Monitor Launcher", "프로그램이 백그라운드로 실행 중입니다.", ToolTipIcon.Info);
+            }
+        }
+
+        private void TrayIcon_DoubleClick(object? sender, EventArgs e)
+        {
+            ShowWindow();
+        }
+
+        private void ShowMenuItem_Click(object? sender, EventArgs e)
+        {
+            ShowWindow();
+        }
+
+        private void ShowWindow()
+        {
+            this.Show();
+            this.WindowState = FormWindowState.Normal;
+            this.Activate();
+        }
+
+        private void ExitMenuItem_Click(object? sender, EventArgs e)
+        {
+            if (MessageBox.Show("Monitor Launcher를 종료하시겠습니까?", "종료 확인", 
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            {
+                trayIcon?.Dispose();
+                Application.Exit();
+            }
+        }
+
+        private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            if (e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                
+                using var dialog = new CloseDialog();
+                var result = dialog.ShowDialog(this);
+                
+                if (result == DialogResult.Yes)
+                {
+                    // 프로그램 종료
+                    trayIcon?.Dispose();
+                    Application.Exit();
+                }
+                else if (result == DialogResult.No)
+                {
+                    // 창만 닫기 (백그라운드 실행)
+                    this.Hide();
+                    if (trayIcon != null)
+                        trayIcon.ShowBalloonTip(2000, "Monitor Launcher", "프로그램이 백그라운드로 실행 중입니다.", ToolTipIcon.Info);
+                }
+                // DialogResult.Cancel인 경우 아무것도 하지 않음 (창 유지)
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                trayIcon?.Dispose();
+                trayMenu?.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 
     public class InputDialog : Form
@@ -596,6 +757,64 @@ namespace MonitorLauncher
             this.Controls.Add(btnCancel);
 
             this.AcceptButton = btnOk;
+            this.CancelButton = btnCancel;
+        }
+    }
+
+    public class CloseDialog : Form
+    {
+        public CloseDialog()
+        {
+            this.Text = "Monitor Launcher";
+            this.Size = new Size(380, 150);
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            this.ShowInTaskbar = false;
+
+            var lblMessage = new Label
+            {
+                Text = "프로그램을 어떻게 하시겠습니까?",
+                Location = new Point(20, 20),
+                Size = new Size(340, 30),
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular)
+            };
+            this.Controls.Add(lblMessage);
+
+            var btnExit = new Button
+            {
+                Text = "종료",
+                DialogResult = DialogResult.Yes,
+                Location = new Point(20, 70),
+                Size = new Size(100, 35),
+                BackColor = Color.FromArgb(220, 53, 69),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+            };
+            this.Controls.Add(btnExit);
+
+            var btnMinimize = new Button
+            {
+                Text = "백그라운드 실행",
+                DialogResult = DialogResult.No,
+                Location = new Point(130, 70),
+                Size = new Size(120, 35),
+                BackColor = Color.FromArgb(0, 120, 215),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+            };
+            this.Controls.Add(btnMinimize);
+
+            var btnCancel = new Button
+            {
+                Text = "취소",
+                DialogResult = DialogResult.Cancel,
+                Location = new Point(260, 70),
+                Size = new Size(100, 35)
+            };
+            this.Controls.Add(btnCancel);
+
             this.CancelButton = btnCancel;
         }
     }

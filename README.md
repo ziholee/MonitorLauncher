@@ -1,4 +1,4 @@
-# Monitor Launcher v1.0
+# Monitor Launcher v1.1
 
 Windows 다중 모니터 환경에서 프로그램을 특정 모니터에서 실행할 수 있게 해주는 경량 유틸리티입니다.
 
