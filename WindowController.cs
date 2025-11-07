@@ -125,11 +125,4 @@ namespace MonitorLauncher
             return foundWindow;
         }
     }
-
-    public enum AppWindowState
-    {
-        Normal,
-        Maximized,
-        Restore
-    }
 }
