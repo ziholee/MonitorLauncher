@@ -39,7 +39,7 @@ namespace MonitorLauncher
 
         private void InitializeComponent()
         {
-            this.Text = "Monitor Launcher v1.1";
+            this.Text = "Monitor Launcher v1.2";
             this.Size = new Size(600, 550);
             this.StartPosition = FormStartPosition.Manual;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -371,9 +371,16 @@ namespace MonitorLauncher
                     return;
                 }
 
-                await Task.Delay(200); // 프로세스 초기화 대기
-
+                // 프로그램 실행 후 즉시 창 위치 제어 시도
+                await Task.Delay(100);
                 bool success = await WindowController.MoveWindowToMonitor(process, targetScreen, windowState);
+                
+                // 추가 재시도: 일부 프로그램은 나중에 창 위치를 변경할 수 있음
+                if (success)
+                {
+                    await Task.Delay(500);
+                    await WindowController.EnsureWindowOnMonitor(process, targetScreen, windowState);
+                }
 
                 if (success)
                     UpdateStatus($"프로그램이 {targetScreen.DeviceName}에서 실행되었습니다.");
@@ -500,8 +507,16 @@ namespace MonitorLauncher
                     return;
                 }
 
-                await Task.Delay(200);
+                // 프로그램 실행 후 즉시 창 위치 제어 시도
+                await Task.Delay(100);
                 bool success = await WindowController.MoveWindowToMonitor(process, targetScreen, profile.WindowState);
+                
+                // 추가 재시도: 일부 프로그램은 나중에 창 위치를 변경할 수 있음
+                if (success)
+                {
+                    await Task.Delay(500);
+                    await WindowController.EnsureWindowOnMonitor(process, targetScreen, profile.WindowState);
+                }
 
                 if (success)
                     UpdateStatus($"프로필 '{profile.Name}' 실행 완료");

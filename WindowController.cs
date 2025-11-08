@@ -27,7 +27,11 @@ namespace MonitorLauncher
 
                 try
                 {
-                    process.Refresh();
+                    // 필요한 경우에만 Refresh 호출 (최적화)
+                    if (mainWindowHandle == IntPtr.Zero)
+                    {
+                        process.Refresh();
+                    }
                     mainWindowHandle = process.MainWindowHandle;
 
                     if (mainWindowHandle != IntPtr.Zero)
@@ -105,21 +109,68 @@ namespace MonitorLauncher
             return success;
         }
 
+        public static async Task EnsureWindowOnMonitor(Process process, Screen targetScreen, AppWindowState windowState)
+        {
+            if (process == null || process.HasExited)
+                return;
+
+            IntPtr hWnd = IntPtr.Zero;
+            int attempts = 0;
+            const int maxAttempts = 20; // 2초간 재시도
+
+            // 윈도우 핸들 획득
+            while (attempts < maxAttempts && hWnd == IntPtr.Zero)
+            {
+                if (process.HasExited)
+                    return;
+
+                try
+                {
+                    // 필요한 경우에만 Refresh 호출 (최적화)
+                    if (hWnd == IntPtr.Zero)
+                    {
+                        process.Refresh();
+                    }
+                    hWnd = process.MainWindowHandle;
+                    if (hWnd == IntPtr.Zero)
+                    {
+                        hWnd = FindMainWindowByProcessId(process.Id);
+                    }
+                }
+                catch { }
+
+                if (hWnd != IntPtr.Zero)
+                    break;
+
+                await Task.Delay(100);
+                attempts++;
+            }
+
+            if (hWnd != IntPtr.Zero)
+            {
+                await EnsureWindowOnMonitor(hWnd, targetScreen, windowState);
+            }
+        }
+
         private static async Task EnsureWindowOnMonitor(IntPtr hWnd, Screen targetScreen, AppWindowState windowState)
         {
             if (hWnd == IntPtr.Zero)
                 return;
 
             var targetBounds = targetScreen.Bounds;
-            const int maxRetries = 10;
-            const int retryDelay = 200; // 200ms
+            const int maxRetries = 20; // 2초간 재시도 (100ms * 20)
+            const int retryDelay = 100; // 100ms
+            int consecutiveSuccess = 0; // 연속 성공 횟수
 
             for (int i = 0; i < maxRetries; i++)
             {
                 await Task.Delay(retryDelay);
 
                 if (!Win32Api.GetWindowRect(hWnd, out var currentRect))
+                {
+                    consecutiveSuccess = 0; // 실패 시 리셋
                     continue;
+                }
 
                 // 창이 대상 모니터 영역에 있는지 확인 (창의 중심점이 모니터 내에 있는지 확인)
                 int windowCenterX = (currentRect.Left + currentRect.Right) / 2;
@@ -130,9 +181,18 @@ namespace MonitorLauncher
                                         windowCenterY >= targetBounds.Top &&
                                         windowCenterY <= targetBounds.Bottom;
 
-                // 창이 대상 모니터에 있으면 종료
+                // 창이 대상 모니터에 있으면 연속 확인
                 if (isOnTargetMonitor)
-                    break;
+                {
+                    consecutiveSuccess++;
+                    // 3회 연속 확인 시 조기 종료
+                    if (consecutiveSuccess >= 3)
+                        break;
+                }
+                else
+                {
+                    consecutiveSuccess = 0; // 실패 시 리셋
+                }
 
                 // 창이 다른 모니터에 있으면 다시 이동
                 switch (windowState)
