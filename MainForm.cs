@@ -716,7 +716,7 @@ namespace MonitorLauncher
         public InputDialog(string prompt)
         {
             this.Text = "프로필 이름";
-            this.Size = new Size(400, 120);
+            this.Size = new Size(400, 150);
             this.StartPosition = FormStartPosition.CenterParent;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -726,14 +726,14 @@ namespace MonitorLauncher
             var lblPrompt = new Label
             {
                 Text = prompt,
-                Location = new Point(10, 10),
+                Location = new Point(10, 15),
                 Size = new Size(370, 20)
             };
             this.Controls.Add(lblPrompt);
 
             textBox = new TextBox
             {
-                Location = new Point(10, 35),
+                Location = new Point(10, 40),
                 Size = new Size(370, 23)
             };
             this.Controls.Add(textBox);
@@ -742,7 +742,7 @@ namespace MonitorLauncher
             {
                 Text = "확인",
                 DialogResult = DialogResult.OK,
-                Location = new Point(220, 65),
+                Location = new Point(220, 80),
                 Size = new Size(75, 30)
             };
             btnOk.Click += (s, e) => { InputText = textBox.Text; };
@@ -752,7 +752,7 @@ namespace MonitorLauncher
             {
                 Text = "취소",
                 DialogResult = DialogResult.Cancel,
-                Location = new Point(305, 65),
+                Location = new Point(305, 80),
                 Size = new Size(75, 30)
             };
             this.Controls.Add(btnCancel);

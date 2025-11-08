@@ -34,6 +34,8 @@
 - `Profile.cs`에 `using System.Collections.Generic;` 추가
 - 존재하지 않는 `icon.ico` 참조 제거
 - `AppWindowState` enum을 별도 파일로 분리
+- 모니터 선택 변경 시 창이 자동으로 이동되던 문제 수정
+- 프로필 이름 입력 다이얼로그에서 확인/취소 버튼이 잘리던 문제 수정 (창 높이 120 → 150)
 
 ---
 
