@@ -1,5 +1,19 @@
 # Monitor Launcher 변경 이력
 
+## [1.2.3] - 2025-12-16
+
+### 기능 추가
+- 메인 화면 상단에 앱 로고 표시
+  - `Resources/logo.png`를 이용한 로고 렌더링
+  - 로고 리소스를 빌드 출력에 자동 포함하도록 프로젝트 설정 추가
+
+### 배포/자동화
+- GitHub Actions를 이용한 자동 빌드 및 릴리스 설정
+  - 태그(`v*`) 푸시 시 Windows용 exe 자동 빌드
+  - 빌드된 `MonitorLauncher.exe`를 GitHub Release Assets에 자동 업로드
+
+---
+
 ## [1.2.2] - 2025-12-16
 
 ### 성능 최적화

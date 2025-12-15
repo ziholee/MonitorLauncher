@@ -39,14 +39,36 @@ namespace MonitorLauncher
 
         private void InitializeComponent()
         {
-            this.Text = "Monitor Launcher v1.2";
+            this.Text = "Monitor Launcher v1.2.3";
             this.Size = new Size(600, 550);
             this.StartPosition = FormStartPosition.Manual;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.Resize += MainForm_Resize;
 
-            int yPos = 20;
+            // 상단 로고
+            try
+            {
+                string logoPath = Path.Combine(AppContext.BaseDirectory, "Resources", "logo.png");
+                if (File.Exists(logoPath))
+                {
+                    var logoPicture = new PictureBox
+                    {
+                        Image = Image.FromFile(logoPath),
+                        SizeMode = PictureBoxSizeMode.Zoom,
+                        Location = new Point(20, 15), // 좌측 상단 여백 20,15
+                        Size = new Size(80, 80)       // 폼 상단에서 충분히 보이는 크기
+                    };
+                    this.Controls.Add(logoPicture);
+                    logoPicture.BringToFront();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MonitorLauncher] 로고 로드 실패: {ex}");
+            }
+
+            int yPos = 110;
             int labelWidth = 120;
             int controlWidth = 400;
             int spacing = 35;
