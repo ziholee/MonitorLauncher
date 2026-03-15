@@ -30,6 +30,9 @@ namespace MonitorLauncher
         private bool isLoadingProfileSelection;
         private bool launchBlockedByUnresolvedProfileMonitor;
         private ToolStripMenuItem? trayProfilesMenuItem;
+        private ToolTip? uiToolTip;
+        private const int LayoutMinWidth = 980;
+        private const int LayoutMinHeight = 640;
 
         public MainForm()
         {
@@ -44,7 +47,8 @@ namespace MonitorLauncher
         private void InitializeComponent()
         {
             this.Text = "Monitor Launcher v1.2.4";
-            this.Size = new Size(980, 640);
+            this.Size = new Size(LayoutMinWidth, LayoutMinHeight);
+            this.MinimumSize = new Size(LayoutMinWidth, LayoutMinHeight);
             this.StartPosition = FormStartPosition.Manual;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
@@ -55,6 +59,7 @@ namespace MonitorLauncher
             Font labelFont = new Font("Segoe UI", 9F, FontStyle.Bold);
             Font titleFont = new Font("Segoe UI Semibold", 20F, FontStyle.Bold);
             Font cardTitleFont = new Font("Segoe UI Semibold", 12F, FontStyle.Bold);
+            uiToolTip = new ToolTip();
 
             PictureBox? logoPicture = null;
             try
@@ -145,7 +150,7 @@ namespace MonitorLauncher
             cmbMonitors.SelectedIndexChanged += CmbMonitors_SelectedIndexChanged;
             leftCard.Controls.Add(cmbMonitors);
 
-            btnRefreshMonitors = CreateIconButton("↻", new Point(362, 108));
+            btnRefreshMonitors = CreateIconButton("\uE72C", new Point(362, 108), "모니터 새로고침");
             btnRefreshMonitors.Click += BtnRefreshMonitors_Click;
             leftCard.Controls.Add(btnRefreshMonitors);
 
@@ -157,7 +162,7 @@ namespace MonitorLauncher
             txtExecutablePath.TextChanged += ClearUnresolvedProfileLaunchBlock;
             leftCard.Controls.Add(executableShell);
 
-            btnBrowse = CreateIconButton("📁", new Point(362, 178));
+            btnBrowse = CreateIconButton("\uE8B7", new Point(362, 178), "실행 파일 찾기");
             btnBrowse.Click += BtnBrowse_Click;
             leftCard.Controls.Add(btnBrowse);
 
@@ -222,21 +227,33 @@ namespace MonitorLauncher
             };
             rightCard.Controls.Add(lblProfilesSubtitle);
 
-            lstProfiles = new ListBox
+            var profileListShell = new Panel
             {
                 Location = new Point(26, 84),
                 Size = new Size(414, 286),
+                BackColor = Color.FromArgb(248, 249, 252),
+                Padding = new Padding(8)
+            };
+            profileListShell.Paint += ProfileListShell_Paint;
+            rightCard.Controls.Add(profileListShell);
+
+            lstProfiles = new ListBox
+            {
+                Location = new Point(8, 8),
+                Size = new Size(398, 270),
                 BorderStyle = BorderStyle.None,
                 DrawMode = DrawMode.OwnerDrawFixed,
                 ItemHeight = 62,
                 Font = uiFont,
                 IntegralHeight = false,
-                BackColor = Color.White
+                BackColor = Color.FromArgb(248, 249, 252),
+                ForeColor = Color.FromArgb(35, 41, 52),
+                HorizontalScrollbar = false
             };
             lstProfiles.SelectedIndexChanged += LstProfiles_SelectedIndexChanged;
             lstProfiles.DoubleClick += LstProfiles_DoubleClick;
             lstProfiles.DrawItem += LstProfiles_DrawItem;
-            rightCard.Controls.Add(lstProfiles);
+            profileListShell.Controls.Add(lstProfiles);
 
             btnSaveProfile = new Button
             {
@@ -344,20 +361,19 @@ namespace MonitorLauncher
             var selectedScreen = screens[cmbMonitors.SelectedIndex];
             var screenBounds = selectedScreen.Bounds;
 
-            // 창 크기를 모니터 해상도에 맞게 조정 (최대 80% 크기, 최소 크기 유지)
-            int maxWidth = Math.Min(screenBounds.Width * 80 / 100, 800);
-            int maxHeight = Math.Min(screenBounds.Height * 80 / 100, 700);
-            
-            // 최소 크기 보장
-            int windowWidth = Math.Max(maxWidth, 600);
-            int windowHeight = Math.Max(maxHeight, 550);
+            const int screenPadding = 80;
+            int availableWidth = Math.Max(screenBounds.Width - screenPadding, LayoutMinWidth);
+            int availableHeight = Math.Max(screenBounds.Height - screenPadding, LayoutMinHeight);
+
+            int windowWidth = Math.Max(Math.Min(availableWidth, 1180), LayoutMinWidth);
+            int windowHeight = Math.Max(Math.Min(availableHeight, 760), LayoutMinHeight);
 
             // 창을 모니터 중앙에 배치
             int windowX = screenBounds.X + (screenBounds.Width - windowWidth) / 2;
             int windowY = screenBounds.Y + (screenBounds.Height - windowHeight) / 2;
 
             this.Size = new Size(windowWidth, windowHeight);
-            this.Location = new Point(windowX, windowY);
+            this.Location = new Point(Math.Max(screenBounds.X, windowX), Math.Max(screenBounds.Y, windowY));
         }
 
         private void BtnRefreshMonitors_Click(object? sender, EventArgs e)
@@ -750,7 +766,7 @@ namespace MonitorLauncher
 
         private static Panel CreateShadowPanel(Rectangle bounds)
         {
-            return new Panel
+            return new ShadowPanel
             {
                 Bounds = bounds,
                 BackColor = Color.FromArgb(223, 227, 235)
@@ -766,7 +782,7 @@ namespace MonitorLauncher
             };
         }
 
-        private static Button CreateIconButton(string text, Point location)
+        private Button CreateIconButton(string text, Point location, string tooltipText)
         {
             var button = new Button
             {
@@ -776,10 +792,13 @@ namespace MonitorLauncher
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.White,
                 ForeColor = Color.FromArgb(61, 72, 91),
-                Font = new Font("Segoe UI Emoji", 11F, FontStyle.Regular),
+                Font = new Font("Segoe MDL2 Assets", 12F, FontStyle.Regular),
                 Cursor = Cursors.Hand
             };
             button.FlatAppearance.BorderColor = Color.FromArgb(207, 214, 224);
+            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(238, 242, 248);
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(244, 247, 251);
+            uiToolTip?.SetToolTip(button, tooltipText);
             return button;
         }
 
@@ -805,6 +824,8 @@ namespace MonitorLauncher
             };
             textBox.Enter += InputControl_Enter;
             textBox.Leave += InputControl_Leave;
+            shell.Click += (_, _) => textBox.Focus();
+            shell.MouseDown += (_, _) => textBox.Focus();
             shell.Controls.Add(textBox);
             return shell;
         }
@@ -882,6 +903,21 @@ namespace MonitorLauncher
                 TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding | TextFormatFlags.Left);
 
             e.DrawFocusRectangle();
+        }
+
+        private void ProfileListShell_Paint(object? sender, PaintEventArgs e)
+        {
+            if (sender is not Panel shell)
+            {
+                return;
+            }
+
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            Rectangle rect = new Rectangle(0, 0, shell.Width - 1, shell.Height - 1);
+            using var brush = new SolidBrush(shell.BackColor);
+            using var pen = new Pen(Color.FromArgb(220, 225, 233));
+            FillRoundedRectangle(e.Graphics, brush, rect, 14);
+            DrawRoundedRectangle(e.Graphics, pen, rect, 14);
         }
 
         private static string GetMonitorSummary(Profile profile)
@@ -1058,8 +1094,54 @@ namespace MonitorLauncher
             {
                 trayIcon?.Dispose();
                 trayMenu?.Dispose();
+                uiToolTip?.Dispose();
             }
             base.Dispose(disposing);
+        }
+    }
+
+    public class ShadowPanel : Panel
+    {
+        public ShadowPanel()
+        {
+            this.DoubleBuffered = true;
+            this.Resize += (_, _) => UpdateRegion();
+            UpdateRegion();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            Rectangle bounds = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
+
+            using var brush = new SolidBrush(this.BackColor);
+            using var path = BuildRoundedPath(bounds, 22);
+            e.Graphics.FillPath(brush, path);
+        }
+
+        private void UpdateRegion()
+        {
+            if (this.Width <= 0 || this.Height <= 0)
+            {
+                return;
+            }
+
+            using var path = BuildRoundedPath(new Rectangle(0, 0, this.Width, this.Height), 22);
+            this.Region = new Region(path);
+        }
+
+        private static System.Drawing.Drawing2D.GraphicsPath BuildRoundedPath(Rectangle bounds, int radius)
+        {
+            int diameter = radius * 2;
+            var path = new System.Drawing.Drawing2D.GraphicsPath();
+            path.AddArc(bounds.X, bounds.Y, diameter, diameter, 180, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Y, diameter, diameter, 270, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(bounds.X, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
         }
     }
 
