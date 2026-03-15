@@ -26,6 +26,7 @@ namespace MonitorLauncher
         private string profilesFilePath = Profile.GetProfilesFilePath();
         private NotifyIcon? trayIcon;
         private ContextMenuStrip? trayMenu;
+        private readonly AppLauncherService appLauncherService = new AppLauncherService();
 
         public MainForm()
         {
@@ -39,7 +40,7 @@ namespace MonitorLauncher
 
         private void InitializeComponent()
         {
-            this.Text = "Monitor Launcher v1.2.3";
+            this.Text = "Monitor Launcher v1.2.4";
             this.Size = new Size(600, 550);
             this.StartPosition = FormStartPosition.Manual;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -342,72 +343,21 @@ namespace MonitorLauncher
 
         private async void BtnLaunch_Click(object? sender, EventArgs e)
         {
-            if (cmbMonitors == null || txtExecutablePath == null || cmbWindowState == null)
+            if (btnLaunch == null)
                 return;
 
-            if (string.IsNullOrWhiteSpace(txtExecutablePath.Text))
+            var request = BuildLaunchRequestFromInputs();
+            if (request == null)
             {
-                MessageBox.Show("실행 파일을 선택해주세요.", "오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            if (!File.Exists(txtExecutablePath.Text))
-            {
-                MessageBox.Show("선택한 파일이 존재하지 않습니다.", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-            if (cmbMonitors.SelectedIndex < 0)
-            {
-                MessageBox.Show("모니터를 선택해주세요.", "오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            var targetScreen = Screen.AllScreens[cmbMonitors.SelectedIndex];
-            var windowState = cmbWindowState.SelectedIndex switch
-            {
-                0 => AppWindowState.Maximized,
-                1 => AppWindowState.Normal,
-                2 => AppWindowState.Restore,
-                _ => AppWindowState.Maximized
-            };
-
-            btnLaunch!.Enabled = false;
+            btnLaunch.Enabled = false;
             UpdateStatus("프로그램 실행 중...");
 
             try
             {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = txtExecutablePath.Text,
-                    UseShellExecute = false
-                };
-
-                if (txtArguments != null && !string.IsNullOrWhiteSpace(txtArguments.Text))
-                    startInfo.Arguments = txtArguments.Text;
-
-                var process = Process.Start(startInfo);
-                if (process == null)
-                {
-                    UpdateStatus("프로그램 실행 실패");
-                    return;
-                }
-
-                // 프로그램 실행 후 즉시 창 위치 제어 시도
-                await Task.Delay(100);
-                bool success = await WindowController.MoveWindowToMonitor(process, targetScreen, windowState);
-                
-                // 추가 재시도: 일부 프로그램은 나중에 창 위치를 변경할 수 있음
-                if (success)
-                {
-                    await Task.Delay(500);
-                    await WindowController.EnsureWindowOnMonitor(process, targetScreen, windowState);
-                }
-
-                if (success)
-                    UpdateStatus($"프로그램이 {targetScreen.DeviceName}에서 실행되었습니다.");
-                else
-                    UpdateStatus("프로그램은 실행되었지만 창 위치 제어에 실패했습니다.");
+                await LaunchAndDisplayResultAsync(request);
             }
             catch (Exception ex)
             {
@@ -480,70 +430,17 @@ namespace MonitorLauncher
 
         private async void LstProfiles_DoubleClick(object? sender, EventArgs e)
         {
-            if (lstProfiles == null || lstProfiles.SelectedIndex < 0)
+            if (lstProfiles == null || lstProfiles.SelectedIndex < 0 || btnLaunch == null)
                 return;
 
             var profile = profiles[lstProfiles.SelectedIndex];
-            if (!File.Exists(profile.ExecutablePath))
-            {
-                MessageBox.Show("저장된 실행 파일이 존재하지 않습니다.", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            var screens = Screen.AllScreens;
-            Screen? targetScreen = null;
-            foreach (var screen in screens)
-            {
-                if (screen.DeviceName == profile.MonitorDeviceName)
-                {
-                    targetScreen = screen;
-                    break;
-                }
-            }
-
-            if (targetScreen == null)
-            {
-                MessageBox.Show("저장된 모니터를 찾을 수 없습니다.", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            if (btnLaunch != null)
-                btnLaunch.Enabled = false;
+            var request = BuildLaunchRequestFromProfile(profile);
+            btnLaunch.Enabled = false;
             UpdateStatus("프로필에서 프로그램 실행 중...");
 
             try
             {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = profile.ExecutablePath,
-                    UseShellExecute = false
-                };
-
-                if (!string.IsNullOrWhiteSpace(profile.Arguments))
-                    startInfo.Arguments = profile.Arguments;
-
-                var process = Process.Start(startInfo);
-                if (process == null)
-                {
-                    UpdateStatus("프로그램 실행 실패");
-                    return;
-                }
-
-                // 프로그램 실행 후 즉시 창 위치 제어 시도
-                await Task.Delay(100);
-                bool success = await WindowController.MoveWindowToMonitor(process, targetScreen, profile.WindowState);
-                
-                // 추가 재시도: 일부 프로그램은 나중에 창 위치를 변경할 수 있음
-                if (success)
-                {
-                    await Task.Delay(500);
-                    await WindowController.EnsureWindowOnMonitor(process, targetScreen, profile.WindowState);
-                }
-
-                if (success)
-                    UpdateStatus($"프로필 '{profile.Name}' 실행 완료");
-                else
-                    UpdateStatus("프로그램은 실행되었지만 창 위치 제어에 실패했습니다.");
+                await LaunchAndDisplayResultAsync(request);
             }
             catch (Exception ex)
             {
@@ -555,6 +452,76 @@ namespace MonitorLauncher
                 if (btnLaunch != null)
                     btnLaunch.Enabled = true;
             }
+        }
+
+        private LaunchRequest? BuildLaunchRequestFromInputs()
+        {
+            if (cmbMonitors == null || txtExecutablePath == null || cmbWindowState == null)
+                return null;
+
+            if (string.IsNullOrWhiteSpace(txtExecutablePath.Text))
+            {
+                MessageBox.Show("실행 파일을 선택해주세요.", "오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return null;
+            }
+
+            if (!File.Exists(txtExecutablePath.Text))
+            {
+                MessageBox.Show("선택한 파일이 존재하지 않습니다.", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return null;
+            }
+
+            if (cmbMonitors.SelectedIndex < 0)
+            {
+                MessageBox.Show("모니터를 선택해주세요.", "오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return null;
+            }
+
+            var targetScreen = Screen.AllScreens[cmbMonitors.SelectedIndex];
+            return new LaunchRequest
+            {
+                ExecutablePath = txtExecutablePath.Text,
+                Arguments = txtArguments?.Text ?? string.Empty,
+                MonitorDeviceName = targetScreen.DeviceName,
+                WindowState = cmbWindowState.SelectedIndex switch
+                {
+                    0 => AppWindowState.Maximized,
+                    1 => AppWindowState.Normal,
+                    2 => AppWindowState.Restore,
+                    _ => AppWindowState.Maximized
+                }
+            };
+        }
+
+        private static LaunchRequest BuildLaunchRequestFromProfile(Profile profile)
+        {
+            return new LaunchRequest
+            {
+                ExecutablePath = profile.ExecutablePath,
+                Arguments = profile.Arguments,
+                MonitorDeviceName = profile.MonitorDeviceName,
+                WindowState = profile.WindowState,
+                ProfileName = profile.Name
+            };
+        }
+
+        private async Task LaunchAndDisplayResultAsync(LaunchRequest request)
+        {
+            var result = await appLauncherService.LaunchAsync(request);
+
+            if (result.FileMissing)
+            {
+                string message = string.IsNullOrWhiteSpace(request.ProfileName)
+                    ? "선택한 파일이 존재하지 않습니다."
+                    : "저장된 실행 파일이 존재하지 않습니다.";
+                MessageBox.Show(message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            else if (result.MonitorMissing)
+            {
+                MessageBox.Show("저장된 모니터를 찾을 수 없습니다.", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+            UpdateStatus(result.StatusMessage);
         }
 
         private void BtnSaveProfile_Click(object? sender, EventArgs e)

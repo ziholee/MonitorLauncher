@@ -1,4 +1,4 @@
-# Monitor Launcher v1.2.3
+# Monitor Launcher v1.2.4
 
 <div align="center">
 
@@ -211,6 +211,7 @@ dotnet run
 
 ### 최근 주요 업데이트
 
+- **v1.2.4**: 프로그램 실행 로직 서비스 분리, 실행 요청/결과 모델 추가, `MainForm` 책임 정리
 - **v1.2.3**: 앱 로고 추가, GitHub Actions 자동 빌드/릴리스 설정
 - **v1.2.2**: 성능 최적화 (CPU 사용량 40% 감소), 창 위치 제어 강화
 - **v1.1.0**: 시스템 트레이 기능, 창 상태 옵션 개선
