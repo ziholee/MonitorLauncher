@@ -819,7 +819,7 @@ namespace MonitorLauncher
             };
             shell.Paint += InputShell_Paint;
 
-            textBox = new TextBox
+            var innerTextBox = new TextBox
             {
                 BorderStyle = BorderStyle.None,
                 Dock = DockStyle.Fill,
@@ -827,11 +827,12 @@ namespace MonitorLauncher
                 BackColor = Color.White,
                 ForeColor = Color.FromArgb(39, 43, 52)
             };
-            textBox.Enter += InputControl_Enter;
-            textBox.Leave += InputControl_Leave;
-            shell.Click += (_, _) => textBox.Focus();
-            shell.MouseDown += (_, _) => textBox.Focus();
-            shell.Controls.Add(textBox);
+            innerTextBox.Enter += InputControl_Enter;
+            innerTextBox.Leave += InputControl_Leave;
+            shell.Click += (_, _) => innerTextBox.Focus();
+            shell.MouseDown += (_, _) => innerTextBox.Focus();
+            shell.Controls.Add(innerTextBox);
+            textBox = innerTextBox;
             return shell;
         }
 
