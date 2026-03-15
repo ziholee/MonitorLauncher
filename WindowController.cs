@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -10,6 +9,23 @@ namespace MonitorLauncher
 {
     public class WindowController
     {
+        public static HashSet<IntPtr> CaptureVisibleWindows()
+        {
+            var windows = new HashSet<IntPtr>();
+
+            Win32Api.EnumWindows((hWnd, lParam) =>
+            {
+                if (IsCandidateWindow(hWnd))
+                {
+                    windows.Add(hWnd);
+                }
+
+                return true;
+            }, IntPtr.Zero);
+
+            return windows;
+        }
+
         public static async Task<bool> MoveWindowToMonitor(Process process, Screen targetScreen, AppWindowState windowState = AppWindowState.Maximized)
         {
             if (process == null || process.HasExited)
@@ -107,6 +123,27 @@ namespace MonitorLauncher
             }
 
             return success;
+        }
+
+        public static async Task<bool> MoveNewWindowToMonitorAsync(HashSet<IntPtr> existingWindows, Screen targetScreen, AppWindowState windowState, int? preferredProcessId = null)
+        {
+            const int maxAttempts = 50;
+
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                await Task.Delay(100);
+
+                var candidate = FindBestNewWindow(existingWindows, preferredProcessId);
+                if (candidate == IntPtr.Zero)
+                {
+                    continue;
+                }
+
+                await EnsureWindowOnMonitor(candidate, targetScreen, windowState);
+                return true;
+            }
+
+            return false;
         }
 
         public static async Task EnsureWindowOnMonitor(Process process, Screen targetScreen, AppWindowState windowState)
@@ -259,6 +296,57 @@ namespace MonitorLauncher
             }
 
             return foundWindow;
+        }
+
+        private static IntPtr FindBestNewWindow(HashSet<IntPtr> existingWindows, int? preferredProcessId)
+        {
+            var candidates = new List<(IntPtr Handle, bool PreferredProcess, int Area)>();
+
+            Win32Api.EnumWindows((hWnd, lParam) =>
+            {
+                if (existingWindows.Contains(hWnd) || !IsCandidateWindow(hWnd))
+                {
+                    return true;
+                }
+
+                Win32Api.GetWindowThreadProcessId(hWnd, out uint pid);
+                bool preferred = preferredProcessId.HasValue && pid == preferredProcessId.Value;
+
+                if (!Win32Api.GetWindowRect(hWnd, out var rect))
+                {
+                    return true;
+                }
+
+                candidates.Add((hWnd, preferred, rect.Width * rect.Height));
+                return true;
+            }, IntPtr.Zero);
+
+            return candidates
+                .OrderByDescending(candidate => candidate.PreferredProcess)
+                .ThenByDescending(candidate => candidate.Area)
+                .Select(candidate => candidate.Handle)
+                .FirstOrDefault();
+        }
+
+        private static bool IsCandidateWindow(IntPtr hWnd)
+        {
+            if (!Win32Api.IsWindowVisible(hWnd))
+            {
+                return false;
+            }
+
+            int exStyle = Win32Api.GetWindowLong32(hWnd, Win32Api.GWL_EXSTYLE);
+            if ((exStyle & Win32Api.WS_EX_TOOLWINDOW) != 0)
+            {
+                return false;
+            }
+
+            if (!Win32Api.GetWindowRect(hWnd, out var rect))
+            {
+                return false;
+            }
+
+            return rect.Width >= 200 && rect.Height >= 150;
         }
     }
 }

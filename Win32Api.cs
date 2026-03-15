@@ -32,6 +32,9 @@ namespace MonitorLauncher
         [DllImport("user32.dll")]
         public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
+        [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
+        public static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT
         {
@@ -52,6 +55,8 @@ namespace MonitorLauncher
         public const uint SWP_SHOWWINDOW = 0x0040;
         public const uint SWP_NOACTIVATE = 0x0010;
         public const uint SWP_ASYNCWINDOWPOS = 0x4000;
+        public const int GWL_EXSTYLE = -20;
+        public const int WS_EX_TOOLWINDOW = 0x00000080;
 
         public const int SW_HIDE = 0;
         public const int SW_SHOWNORMAL = 1;
