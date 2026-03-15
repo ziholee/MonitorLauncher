@@ -113,6 +113,10 @@ namespace MonitorLauncher
             this.Controls.Add(rightShadow);
             this.Controls.Add(leftCard);
             this.Controls.Add(rightCard);
+            leftShadow.SendToBack();
+            rightShadow.SendToBack();
+            leftCard.BringToFront();
+            rightCard.BringToFront();
 
             var lblSettingsTitle = new Label
             {
@@ -295,6 +299,7 @@ namespace MonitorLauncher
                 BackColor = Color.Transparent
             };
             this.Controls.Add(lblStatus);
+            lblStatus.BringToFront();
         }
 
         private void RefreshMonitorList()
