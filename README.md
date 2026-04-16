@@ -1,8 +1,7 @@
 # Monitor Launcher v1.2.4
 
 <div align="center">
-
-![Monitor Launcher Logo](Resources/logo.png)
+<img src="Resources/logo.png" width="40%" />
 
 **Windows 다중 모니터 환경에서 프로그램을 특정 모니터에서 실행할 수 있게 해주는 경량 유틸리티**
 
