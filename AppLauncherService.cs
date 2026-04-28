@@ -29,8 +29,8 @@ namespace MonitorLauncher
                 };
             }
 
-            var existingWindows = WindowController.CaptureVisibleWindows();
             var startInfo = BuildStartInfo(request);
+            var existingWindows = startInfo.UseShellExecute ? null : WindowController.CaptureVisibleWindows();
             Process? process;
             bool launchStarted = false;
 
@@ -54,8 +54,10 @@ namespace MonitorLauncher
 
             await Task.Delay(100);
             bool success = false;
+            bool skippedWindowControl = startInfo.UseShellExecute;
+            bool canControlWindow = process != null && !startInfo.UseShellExecute;
 
-            if (process != null)
+            if (canControlWindow)
             {
                 success = await WindowController.MoveWindowToMonitor(process, targetScreen!, request.WindowState);
             }
@@ -65,10 +67,10 @@ namespace MonitorLauncher
                 await Task.Delay(500);
                 if (process != null)
                 {
-                    await WindowController.EnsureWindowOnMonitor(process, targetScreen!, request.WindowState);
+                    success = await WindowController.EnsureWindowOnMonitor(process, targetScreen!, request.WindowState);
                 }
             }
-            else
+            else if (canControlWindow && existingWindows != null)
             {
                 success = await WindowController.MoveNewWindowToMonitorAsync(existingWindows, targetScreen!, request.WindowState, process?.Id);
             }
@@ -78,7 +80,7 @@ namespace MonitorLauncher
                 Succeeded = launchStarted,
                 WindowMoved = success,
                 UsedMonitorFallback = usedFallbackMonitor,
-                StatusMessage = BuildStatusMessage(request, targetScreen!, success, usedFallbackMonitor)
+                StatusMessage = BuildStatusMessage(request, targetScreen!, success, usedFallbackMonitor, skippedWindowControl)
             };
         }
 
@@ -179,12 +181,17 @@ namespace MonitorLauncher
             return positionDistance + sizeDistance + primaryPenalty;
         }
 
-        private static string BuildStatusMessage(LaunchRequest request, Screen targetScreen, bool success, bool usedFallbackMonitor)
+        private static string BuildStatusMessage(LaunchRequest request, Screen targetScreen, bool success, bool usedFallbackMonitor, bool skippedWindowControl)
         {
             string prefix = usedFallbackMonitor ? "저장된 모니터 대신 가장 유사한 모니터를 사용했습니다. " : string.Empty;
 
             if (!success)
             {
+                if (skippedWindowControl)
+                {
+                    return $"{prefix}프로그램은 실행되었지만 이 실행 방식은 창 위치 제어를 지원하지 않습니다.";
+                }
+
                 return $"{prefix}프로그램은 실행되었지만 창 위치 제어에 실패했습니다.";
             }
 

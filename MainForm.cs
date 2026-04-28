@@ -46,7 +46,7 @@ namespace MonitorLauncher
 
         private void InitializeComponent()
         {
-            this.Text = "Monitor Launcher v1.2.4";
+            this.Text = "Monitor Launcher v1.2.5";
             this.Size = new Size(LayoutMinWidth, LayoutMinHeight);
             this.MinimumSize = new Size(LayoutMinWidth, LayoutMinHeight);
             this.StartPosition = FormStartPosition.Manual;
