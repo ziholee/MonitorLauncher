@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# .NET build output
+bin/
+obj/
+
+# Visual Studio / editors
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.idea/
+.vscode/
