@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Local-only project notes
+CHANGELOG.md
+
 # .NET build output
 bin/
 obj/
