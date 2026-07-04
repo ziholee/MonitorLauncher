@@ -27,10 +27,19 @@ namespace MonitorLauncher
         public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
 
         [DllImport("user32.dll")]
+        public static extern int GetWindowTextLength(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
         public static extern bool BringWindowToTop(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        public static extern bool IsIconic(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
 
         [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
         public static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
@@ -49,6 +58,24 @@ namespace MonitorLauncher
 
         public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT
+        {
+            public int X;
+            public int Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WINDOWPLACEMENT
+        {
+            public int Length;
+            public int Flags;
+            public int ShowCmd;
+            public POINT MinPosition;
+            public POINT MaxPosition;
+            public RECT NormalPosition;
+        }
+
         public const uint SWP_NOSIZE = 0x0001;
         public const uint SWP_NOMOVE = 0x0002;
         public const uint SWP_NOZORDER = 0x0004;
@@ -62,6 +89,7 @@ namespace MonitorLauncher
         public const int SW_SHOWNORMAL = 1;
         public const int SW_SHOWMAXIMIZED = 3;
         public const int SW_RESTORE = 9;
+        public const int SW_SHOWMINIMIZED = 2;
 
         public static IntPtr HWND_TOP = IntPtr.Zero;
     }

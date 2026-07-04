@@ -20,39 +20,55 @@ namespace MonitorLauncher
         private Button? btnRefreshMonitors;
         private Button? btnSaveProfile;
         private Button? btnDeleteProfile;
+        private Button? btnCaptureWorkspace;
+        private Button? btnSaveWorkspace;
+        private Button? btnLaunchWorkspace;
+        private Button? btnDeleteWorkspace;
+        private Button? btnGatherWindows;
+        private TextBox? txtWorkspaceName;
         private ListBox? lstProfiles;
+        private ListBox? lstWorkspaces;
+        private CheckedListBox? chkCapturedWindows;
         private Label? lblStatus;
         private List<Profile> profiles = new List<Profile>();
+        private List<WorkspaceProfile> workspaceProfiles = new List<WorkspaceProfile>();
         private string profilesFilePath = Profile.GetProfilesFilePath();
+        private string workspacesFilePath = WorkspaceProfile.GetWorkspacesFilePath();
         private NotifyIcon? trayIcon;
         private ContextMenuStrip? trayMenu;
         private readonly AppLauncherService appLauncherService = new AppLauncherService();
+        private readonly WindowCaptureService windowCaptureService = new WindowCaptureService();
+        private readonly WorkspaceRestoreService workspaceRestoreService = new WorkspaceRestoreService();
         private bool isLoadingProfileSelection;
         private bool launchBlockedByUnresolvedProfileMonitor;
         private ToolStripMenuItem? trayProfilesMenuItem;
+        private ToolStripMenuItem? trayWorkspacesMenuItem;
         private ToolTip? uiToolTip;
         private const int LayoutMinWidth = 980;
-        private const int LayoutMinHeight = 640;
+        private const int LayoutMinHeight = 860;
 
         public MainForm()
         {
             InitializeComponent();
             InitializeTrayIcon();
             LoadProfiles();
+            LoadWorkspaces();
             RefreshMonitorList();
             RefreshProfileList();
+            RefreshWorkspaceList();
             AdjustWindowToSelectedMonitor();
         }
 
         private void InitializeComponent()
         {
-            this.Text = "Monitor Launcher v1.2.5";
+            this.Text = "Monitor Launcher v2.0.0";
             this.Size = new Size(LayoutMinWidth, LayoutMinHeight);
             this.MinimumSize = new Size(LayoutMinWidth, LayoutMinHeight);
             this.StartPosition = FormStartPosition.Manual;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.BackColor = Color.FromArgb(241, 243, 247);
+            this.Icon = LoadApplicationIcon();
             this.Resize += MainForm_Resize;
 
             Font uiFont = new Font("Segoe UI", 9F, FontStyle.Regular);
@@ -289,10 +305,12 @@ namespace MonitorLauncher
             btnDeleteProfile.Click += BtnDeleteProfile_Click;
             rightCard.Controls.Add(btnDeleteProfile);
 
+            InitializeWorkspaceTab(uiFont, labelFont, cardTitleFont);
+
             lblStatus = new Label
             {
                 Text = "준비됨",
-                Location = new Point(30, 574),
+                Location = new Point(30, 814),
                 Size = new Size(920, 23),
                 Font = uiFont,
                 ForeColor = Color.FromArgb(105, 112, 126),
@@ -302,14 +320,142 @@ namespace MonitorLauncher
             lblStatus.BringToFront();
         }
 
-        private void RefreshMonitorList()
+        private void InitializeWorkspaceTab(Font uiFont, Font labelFont, Font cardTitleFont)
+        {
+            var workspaceTabs = new TabControl
+            {
+                Location = new Point(22, 574),
+                Size = new Size(924, 220),
+                Font = uiFont
+            };
+
+            var workspacePage = new TabPage("워크스페이스")
+            {
+                BackColor = Color.FromArgb(241, 243, 247)
+            };
+            workspaceTabs.TabPages.Add(workspacePage);
+            this.Controls.Add(workspaceTabs);
+
+            var lblWorkspaceTitle = new Label
+            {
+                Text = "워크스페이스",
+                Location = new Point(18, 14),
+                Size = new Size(160, 24),
+                Font = cardTitleFont,
+                ForeColor = Color.FromArgb(35, 41, 52),
+                BackColor = Color.Transparent
+            };
+            workspacePage.Controls.Add(lblWorkspaceTitle);
+
+            var lblWorkspaceName = CreateFieldLabel("이름", new Point(18, 48), labelFont);
+            workspacePage.Controls.Add(lblWorkspaceName);
+
+            var workspaceNameShell = CreateInputShell(new Point(18, 72), new Size(260, 34), out var workspaceNameTextBox);
+            txtWorkspaceName = workspaceNameTextBox;
+            workspacePage.Controls.Add(workspaceNameShell);
+
+            btnCaptureWorkspace = new Button
+            {
+                Text = "현재 배치 가져오기",
+                Location = new Point(294, 72),
+                Size = new Size(150, 34),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.White,
+                ForeColor = Color.FromArgb(61, 72, 91),
+                Font = uiFont,
+                Cursor = Cursors.Hand
+            };
+            btnCaptureWorkspace.Click += BtnCaptureWorkspace_Click;
+            workspacePage.Controls.Add(btnCaptureWorkspace);
+
+            btnSaveWorkspace = new Button
+            {
+                Text = "저장",
+                Location = new Point(454, 72),
+                Size = new Size(78, 34),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(237, 245, 255),
+                ForeColor = Color.FromArgb(0, 120, 215),
+                Font = uiFont,
+                Cursor = Cursors.Hand
+            };
+            btnSaveWorkspace.Click += BtnSaveWorkspace_Click;
+            workspacePage.Controls.Add(btnSaveWorkspace);
+
+            chkCapturedWindows = new CheckedListBox
+            {
+                Location = new Point(18, 114),
+                Size = new Size(514, 72),
+                CheckOnClick = true,
+                Font = uiFont,
+                IntegralHeight = false
+            };
+            workspacePage.Controls.Add(chkCapturedWindows);
+
+            var lblSavedWorkspaces = CreateFieldLabel("저장된 워크스페이스", new Point(556, 18), labelFont);
+            workspacePage.Controls.Add(lblSavedWorkspaces);
+
+            lstWorkspaces = new ListBox
+            {
+                Location = new Point(556, 42),
+                Size = new Size(332, 84),
+                Font = uiFont,
+                IntegralHeight = false
+            };
+            workspacePage.Controls.Add(lstWorkspaces);
+
+            btnLaunchWorkspace = new Button
+            {
+                Text = "실행",
+                Location = new Point(556, 138),
+                Size = new Size(76, 34),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(0, 120, 215),
+                ForeColor = Color.White,
+                Font = uiFont,
+                Cursor = Cursors.Hand
+            };
+            btnLaunchWorkspace.Click += BtnLaunchWorkspace_Click;
+            workspacePage.Controls.Add(btnLaunchWorkspace);
+
+            btnDeleteWorkspace = new Button
+            {
+                Text = "삭제",
+                Location = new Point(642, 138),
+                Size = new Size(76, 34),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(253, 241, 242),
+                ForeColor = Color.FromArgb(194, 59, 75),
+                Font = uiFont,
+                Cursor = Cursors.Hand
+            };
+            btnDeleteWorkspace.Click += BtnDeleteWorkspace_Click;
+            workspacePage.Controls.Add(btnDeleteWorkspace);
+
+            btnGatherWindows = new Button
+            {
+                Text = "모든 창 주 모니터로",
+                Location = new Point(728, 138),
+                Size = new Size(160, 34),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.White,
+                ForeColor = Color.FromArgb(61, 72, 91),
+                Font = uiFont,
+                Cursor = Cursors.Hand
+            };
+            btnGatherWindows.Click += BtnGatherWindows_Click;
+            workspacePage.Controls.Add(btnGatherWindows);
+        }
+
+        private void RefreshMonitorList(bool selectDefaultWhenUnmatched = true)
         {
             if (cmbMonitors == null) return;
 
-            int currentSelection = cmbMonitors.SelectedIndex;
+            var previousSelection = cmbMonitors.SelectedItem as MonitorOption;
             cmbMonitors.Items.Clear();
             var screens = Screen.AllScreens;
             int primaryIndex = -1;
+            int restoredIndex = -1;
 
             for (int i = 0; i < screens.Length; i++)
             {
@@ -325,24 +471,31 @@ namespace MonitorLauncher
                 {
                     displayName = $"모니터 {i + 1} - {screen.Bounds.Width}x{screen.Bounds.Height}";
                 }
-                
-                cmbMonitors.Items.Add(displayName);
+
+                var option = new MonitorOption(displayName, screen);
+                int itemIndex = cmbMonitors.Items.Add(option);
+                if (previousSelection != null && previousSelection.Matches(screen))
+                {
+                    restoredIndex = itemIndex;
+                }
             }
 
-            // 기본 모니터(Primary)를 기본 선택으로 설정
-            if (primaryIndex >= 0 && currentSelection < 0)
+            if (restoredIndex >= 0)
+            {
+                cmbMonitors.SelectedIndex = restoredIndex;
+            }
+            else if (selectDefaultWhenUnmatched && primaryIndex >= 0)
             {
                 cmbMonitors.SelectedIndex = primaryIndex;
             }
-            else if (currentSelection >= 0 && currentSelection < cmbMonitors.Items.Count)
-            {
-                // 기존 선택 유지
-                cmbMonitors.SelectedIndex = currentSelection;
-            }
-            else if (cmbMonitors.Items.Count > 0)
+            else if (selectDefaultWhenUnmatched && cmbMonitors.Items.Count > 0)
             {
                 // Primary 모니터를 찾지 못한 경우 첫 번째 모니터 선택
                 cmbMonitors.SelectedIndex = 0;
+            }
+            else
+            {
+                cmbMonitors.SelectedIndex = -1;
             }
         }
 
@@ -359,11 +512,9 @@ namespace MonitorLauncher
             if (cmbMonitors == null || cmbMonitors.SelectedIndex < 0)
                 return;
 
-            var screens = Screen.AllScreens;
-            if (cmbMonitors.SelectedIndex >= screens.Length)
+            if (!TryResolveSelectedMonitor(out var selectedScreen) || selectedScreen == null)
                 return;
 
-            var selectedScreen = screens[cmbMonitors.SelectedIndex];
             var screenBounds = selectedScreen.Bounds;
 
             const int screenPadding = 80;
@@ -450,6 +601,20 @@ namespace MonitorLauncher
             }
         }
 
+        private void LoadWorkspaces()
+        {
+            try
+            {
+                workspaceProfiles = WorkspaceProfile.LoadWorkspaces(workspacesFilePath);
+                RebuildTrayWorkspacesMenu();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"워크스페이스 로드 실패: {ex.Message}", "경고", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                workspaceProfiles = new List<WorkspaceProfile>();
+            }
+        }
+
         private void RefreshProfileList()
         {
             if (lstProfiles == null) return;
@@ -461,6 +626,23 @@ namespace MonitorLauncher
             }
 
             RebuildTrayProfilesMenu();
+        }
+
+        private void RefreshWorkspaceList()
+        {
+            if (lstWorkspaces == null)
+            {
+                RebuildTrayWorkspacesMenu();
+                return;
+            }
+
+            lstWorkspaces.Items.Clear();
+            foreach (var workspace in workspaceProfiles.OrderBy(workspace => workspace.Name, StringComparer.CurrentCultureIgnoreCase))
+            {
+                lstWorkspaces.Items.Add(workspace);
+            }
+
+            RebuildTrayWorkspacesMenu();
         }
 
         private void LstProfiles_SelectedIndexChanged(object? sender, EventArgs e)
@@ -531,7 +713,11 @@ namespace MonitorLauncher
                 return null;
             }
 
-            var targetScreen = Screen.AllScreens[cmbMonitors.SelectedIndex];
+            if (!TryGetSelectedMonitor("실행", out var targetScreen) || targetScreen == null)
+            {
+                return null;
+            }
+
             return new LaunchRequest
             {
                 ExecutablePath = txtExecutablePath.Text,
@@ -550,6 +736,54 @@ namespace MonitorLauncher
                     _ => AppWindowState.Maximized
                 }
             };
+        }
+
+        private bool TryGetSelectedMonitor(string actionName, out Screen? targetScreen)
+        {
+            targetScreen = null;
+
+            if (cmbMonitors == null)
+            {
+                return false;
+            }
+
+            if (cmbMonitors.SelectedIndex < 0)
+            {
+                MessageBox.Show("모니터를 선택해주세요.", "오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+
+            if (!TryResolveSelectedMonitor(out targetScreen))
+            {
+                string message = $"모니터 연결 상태가 변경되어 선택한 모니터를 {actionName}에 사용할 수 없습니다. 모니터 목록을 새로고침했습니다. 사용할 모니터를 다시 선택해주세요.";
+                MessageBox.Show(message, "모니터 확인 필요", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                UpdateStatus(message);
+                RefreshMonitorList(selectDefaultWhenUnmatched: false);
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool TryResolveSelectedMonitor(out Screen? targetScreen)
+        {
+            targetScreen = null;
+
+            if (cmbMonitors?.SelectedItem is not MonitorOption selectedMonitor)
+            {
+                return false;
+            }
+
+            foreach (var screen in Screen.AllScreens)
+            {
+                if (selectedMonitor.Matches(screen))
+                {
+                    targetScreen = screen;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static LaunchRequest BuildLaunchRequestFromProfile(Profile profile)
@@ -628,10 +862,9 @@ namespace MonitorLauncher
                 return false;
             }
 
-            var screens = Screen.AllScreens;
-            for (int i = 0; i < screens.Length; i++)
+            for (int i = 0; i < cmbMonitors.Items.Count; i++)
             {
-                if (screens[i].DeviceName == resolvedScreen.DeviceName)
+                if (cmbMonitors.Items[i] is MonitorOption option && option.Matches(resolvedScreen))
                 {
                     cmbMonitors.SelectedIndex = i;
                     UpdateStatus(usedFallback
@@ -675,7 +908,11 @@ namespace MonitorLauncher
             using var dialog = new InputDialog("프로필 이름을 입력하세요:");
             if (dialog.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.InputText))
             {
-                var targetScreen = Screen.AllScreens[cmbMonitors.SelectedIndex];
+                if (!TryGetSelectedMonitor("프로필 저장", out var targetScreen) || targetScreen == null)
+                {
+                    return;
+                }
+
                 var profile = new Profile
                 {
                     Name = dialog.InputText,
@@ -696,17 +933,15 @@ namespace MonitorLauncher
                     }
                 };
 
-                var existing = profiles.FirstOrDefault(p => p.Name == profile.Name);
-                if (existing != null)
-                {
-                    profiles.Remove(existing);
-                }
-
-                profiles.Add(profile);
+                var updatedProfiles = profiles
+                    .Where(p => p.Name != profile.Name)
+                    .ToList();
+                updatedProfiles.Add(profile);
 
                 try
                 {
-                    Profile.SaveProfiles(profiles, profilesFilePath);
+                    Profile.SaveProfiles(updatedProfiles, profilesFilePath);
+                    profiles = updatedProfiles;
                     RefreshProfileList();
                     UpdateStatus($"프로필 '{profile.Name}'이 저장되었습니다.");
                 }
@@ -733,10 +968,14 @@ namespace MonitorLauncher
 
             if (MessageBox.Show($"프로필 '{profile.Name}'을(를) 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
             {
-                profiles.Remove(profile);
+                var updatedProfiles = profiles
+                    .Where(p => !ReferenceEquals(p, profile))
+                    .ToList();
+
                 try
                 {
-                    Profile.SaveProfiles(profiles, profilesFilePath);
+                    Profile.SaveProfiles(updatedProfiles, profilesFilePath);
+                    profiles = updatedProfiles;
                     RefreshProfileList();
                     UpdateStatus($"프로필 '{profile.Name}'이 삭제되었습니다.");
                 }
@@ -745,6 +984,178 @@ namespace MonitorLauncher
                     MessageBox.Show($"프로필 삭제 실패: {ex.Message}", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
+        }
+
+        private void BtnCaptureWorkspace_Click(object? sender, EventArgs e)
+        {
+            CaptureWindowsIntoChecklist();
+        }
+
+        private void BtnSaveWorkspace_Click(object? sender, EventArgs e)
+        {
+            if (chkCapturedWindows == null || txtWorkspaceName == null)
+            {
+                return;
+            }
+
+            if (chkCapturedWindows.Items.Count == 0)
+            {
+                CaptureWindowsIntoChecklist();
+            }
+
+            var selectedWindows = chkCapturedWindows.CheckedItems
+                .OfType<CapturedWindowInfo>()
+                .ToList();
+
+            if (selectedWindows.Count == 0)
+            {
+                MessageBox.Show("워크스페이스에 포함할 창을 선택해주세요.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string workspaceName = txtWorkspaceName.Text.Trim();
+            if (string.IsNullOrWhiteSpace(workspaceName))
+            {
+                using var dialog = new InputDialog("워크스페이스 이름을 입력하세요:");
+                if (dialog.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(dialog.InputText))
+                {
+                    return;
+                }
+
+                workspaceName = dialog.InputText.Trim();
+                txtWorkspaceName.Text = workspaceName;
+            }
+
+            var now = DateTime.Now;
+            var existing = workspaceProfiles.FirstOrDefault(workspace => workspace.Name == workspaceName);
+            var workspaceProfile = new WorkspaceProfile
+            {
+                Name = workspaceName,
+                Apps = selectedWindows.Select(window => window.ToAppWindowProfile()).ToList(),
+                CreatedAt = existing?.CreatedAt ?? now,
+                UpdatedAt = now
+            };
+
+            var updatedWorkspaces = workspaceProfiles
+                .Where(workspace => workspace.Name != workspaceProfile.Name)
+                .ToList();
+            updatedWorkspaces.Add(workspaceProfile);
+
+            try
+            {
+                WorkspaceProfile.SaveWorkspaces(updatedWorkspaces, workspacesFilePath);
+                workspaceProfiles = updatedWorkspaces;
+                RefreshWorkspaceList();
+                UpdateStatus($"워크스페이스 '{workspaceProfile.Name}'이 저장되었습니다.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"워크스페이스 저장 실패: {ex.Message}", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async void BtnLaunchWorkspace_Click(object? sender, EventArgs e)
+        {
+            if (lstWorkspaces?.SelectedItem is not WorkspaceProfile workspace)
+            {
+                MessageBox.Show("실행할 워크스페이스를 선택해주세요.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            await RestoreWorkspaceAsync(workspace, $"워크스페이스 '{workspace.Name}' 실행 중...");
+        }
+
+        private void BtnDeleteWorkspace_Click(object? sender, EventArgs e)
+        {
+            if (lstWorkspaces?.SelectedItem is not WorkspaceProfile workspace)
+            {
+                MessageBox.Show("삭제할 워크스페이스를 선택해주세요.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (MessageBox.Show($"워크스페이스 '{workspace.Name}'을(를) 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            {
+                return;
+            }
+
+            var updatedWorkspaces = workspaceProfiles
+                .Where(item => !ReferenceEquals(item, workspace))
+                .ToList();
+
+            try
+            {
+                WorkspaceProfile.SaveWorkspaces(updatedWorkspaces, workspacesFilePath);
+                workspaceProfiles = updatedWorkspaces;
+                RefreshWorkspaceList();
+                UpdateStatus($"워크스페이스 '{workspace.Name}'이 삭제되었습니다.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"워크스페이스 삭제 실패: {ex.Message}", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void BtnGatherWindows_Click(object? sender, EventArgs e)
+        {
+            int movedCount = workspaceRestoreService.GatherWindowsToPrimaryMonitor();
+            UpdateStatus(movedCount == 0
+                ? "주 모니터로 이동할 창이 없습니다."
+                : $"{movedCount}개 창을 주 모니터로 이동했습니다.");
+        }
+
+        private void CaptureWindowsIntoChecklist()
+        {
+            if (chkCapturedWindows == null)
+            {
+                return;
+            }
+
+            var windows = windowCaptureService.CaptureOpenWindows();
+            chkCapturedWindows.Items.Clear();
+
+            foreach (var window in windows)
+            {
+                chkCapturedWindows.Items.Add(window, true);
+            }
+
+            UpdateStatus(windows.Count == 0
+                ? "캡처할 일반 창을 찾지 못했습니다."
+                : $"{windows.Count}개 창을 캡처했습니다. 저장할 창만 체크해주세요.");
+        }
+
+        private async Task RestoreWorkspaceAsync(WorkspaceProfile workspace, string statusMessage)
+        {
+            ToggleWorkspaceButtons(false);
+            UpdateStatus(statusMessage);
+
+            try
+            {
+                var result = await workspaceRestoreService.RestoreAsync(workspace);
+                UpdateStatus(result.Summary);
+
+                if (result.FailedApps > 0)
+                {
+                    MessageBox.Show(string.Join(Environment.NewLine, result.Messages), "워크스페이스 복원 결과", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"워크스페이스 실행 실패: {ex.Message}", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                UpdateStatus($"워크스페이스 실행 실패: {ex.Message}");
+            }
+            finally
+            {
+                ToggleWorkspaceButtons(true);
+            }
+        }
+
+        private void ToggleWorkspaceButtons(bool enabled)
+        {
+            if (btnLaunchWorkspace != null) btnLaunchWorkspace.Enabled = enabled;
+            if (btnSaveWorkspace != null) btnSaveWorkspace.Enabled = enabled;
+            if (btnDeleteWorkspace != null) btnDeleteWorkspace.Enabled = enabled;
+            if (btnCaptureWorkspace != null) btnCaptureWorkspace.Enabled = enabled;
+            if (btnGatherWindows != null) btnGatherWindows.Enabled = enabled;
         }
 
         private void UpdateStatus(string message)
@@ -970,6 +1381,9 @@ namespace MonitorLauncher
             trayProfilesMenuItem = new ToolStripMenuItem("프로필 실행");
             trayMenu.Items.Add(trayProfilesMenuItem);
 
+            trayWorkspacesMenuItem = new ToolStripMenuItem("워크스페이스 실행");
+            trayMenu.Items.Add(trayWorkspacesMenuItem);
+
             var showMenuItem = new ToolStripMenuItem("표시");
             showMenuItem.Click += ShowMenuItem_Click;
             trayMenu.Items.Add(showMenuItem);
@@ -980,7 +1394,7 @@ namespace MonitorLauncher
 
             trayIcon = new NotifyIcon
             {
-                Icon = SystemIcons.Application,
+                Icon = LoadApplicationIcon(),
                 ContextMenuStrip = trayMenu,
                 Text = "Monitor Launcher",
                 Visible = true
@@ -989,6 +1403,26 @@ namespace MonitorLauncher
             trayIcon.DoubleClick += TrayIcon_DoubleClick;
             this.FormClosing += MainForm_FormClosing;
             RebuildTrayProfilesMenu();
+            RebuildTrayWorkspacesMenu();
+        }
+
+        private static Icon LoadApplicationIcon()
+        {
+            string iconPath = Path.Combine(AppContext.BaseDirectory, "Resources", "favicon.ico");
+            if (!File.Exists(iconPath))
+            {
+                return SystemIcons.Application;
+            }
+
+            try
+            {
+                return new Icon(iconPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MonitorLauncher] 아이콘 로드 실패: {ex}");
+                return SystemIcons.Application;
+            }
         }
 
         private void RebuildTrayProfilesMenu()
@@ -1021,6 +1455,36 @@ namespace MonitorLauncher
             }
         }
 
+        private void RebuildTrayWorkspacesMenu()
+        {
+            if (trayWorkspacesMenuItem == null)
+            {
+                return;
+            }
+
+            trayWorkspacesMenuItem.DropDownItems.Clear();
+
+            if (workspaceProfiles.Count == 0)
+            {
+                var emptyItem = new ToolStripMenuItem("저장된 워크스페이스 없음")
+                {
+                    Enabled = false
+                };
+                trayWorkspacesMenuItem.DropDownItems.Add(emptyItem);
+                return;
+            }
+
+            foreach (var workspace in workspaceProfiles.OrderBy(workspace => workspace.Name, StringComparer.CurrentCultureIgnoreCase))
+            {
+                var workspaceMenuItem = new ToolStripMenuItem(workspace.Name)
+                {
+                    Tag = workspace
+                };
+                workspaceMenuItem.Click += TrayWorkspaceMenuItem_Click;
+                trayWorkspacesMenuItem.DropDownItems.Add(workspaceMenuItem);
+            }
+        }
+
         private void MainForm_Resize(object? sender, EventArgs e)
         {
             if (this.WindowState == FormWindowState.Minimized)
@@ -1049,6 +1513,16 @@ namespace MonitorLauncher
             }
 
             await LaunchProfileAsync(profile, $"트레이에서 프로필 '{profile.Name}' 실행 중...");
+        }
+
+        private async void TrayWorkspaceMenuItem_Click(object? sender, EventArgs e)
+        {
+            if (sender is not ToolStripMenuItem menuItem || menuItem.Tag is not WorkspaceProfile workspace)
+            {
+                return;
+            }
+
+            await RestoreWorkspaceAsync(workspace, $"트레이에서 워크스페이스 '{workspace.Name}' 실행 중...");
         }
 
         private void ShowWindow()
@@ -1103,6 +1577,31 @@ namespace MonitorLauncher
                 uiToolTip?.Dispose();
             }
             base.Dispose(disposing);
+        }
+
+        private sealed class MonitorOption
+        {
+            public MonitorOption(string displayName, Screen screen)
+            {
+                DisplayName = displayName;
+                DeviceName = screen.DeviceName;
+                Bounds = screen.Bounds;
+            }
+
+            private string DisplayName { get; }
+            private string DeviceName { get; }
+            private Rectangle Bounds { get; }
+
+            public bool Matches(Screen screen)
+            {
+                return DeviceName == screen.DeviceName &&
+                    Bounds == screen.Bounds;
+            }
+
+            public override string ToString()
+            {
+                return DisplayName;
+            }
         }
     }
 
