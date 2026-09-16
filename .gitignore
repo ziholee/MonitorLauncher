@@ -3,6 +3,7 @@
 
 # Local-only project notes
 CHANGELOG.md
+/tasks/
 
 # .NET build output
 bin/
