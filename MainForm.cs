@@ -53,7 +53,7 @@ namespace MonitorLauncher
             InitializeTrayIcon();
             LoadProfiles();
             LoadWorkspaces();
-            RefreshMonitorList();
+            RefreshMonitorList(selectDefaultWhenUnmatched: true);
             RefreshProfileList();
             RefreshWorkspaceList();
             AdjustWindowToSelectedMonitor();
@@ -447,7 +447,8 @@ namespace MonitorLauncher
             workspacePage.Controls.Add(btnGatherWindows);
         }
 
-        private void RefreshMonitorList(bool selectDefaultWhenUnmatched = true)
+        // 기본 모니터 자동 선택은 최초 초기화에서만 허용한다.
+        private void RefreshMonitorList(bool selectDefaultWhenUnmatched = false)
         {
             if (cmbMonitors == null) return;
 
@@ -535,7 +536,9 @@ namespace MonitorLauncher
         private void BtnRefreshMonitors_Click(object? sender, EventArgs e)
         {
             RefreshMonitorList();
-            UpdateStatus("모니터 목록이 새로고침되었습니다.");
+            UpdateStatus(cmbMonitors?.SelectedItem is MonitorOption
+                ? "모니터 목록이 새로고침되었습니다."
+                : "모니터 목록이 새로고침되었습니다. 사용할 모니터를 다시 선택해주세요.");
         }
 
         private void BtnBrowse_Click(object? sender, EventArgs e)
@@ -756,9 +759,11 @@ namespace MonitorLauncher
             if (!TryResolveSelectedMonitor(out targetScreen))
             {
                 string message = $"모니터 연결 상태가 변경되어 선택한 모니터를 {actionName}에 사용할 수 없습니다. 모니터 목록을 새로고침했습니다. 사용할 모니터를 다시 선택해주세요.";
+                // 경고를 닫는 동안 모니터가 돌아와도 자동으로 선택을 복원하지 않는다.
+                cmbMonitors.SelectedIndex = -1;
+                RefreshMonitorList();
                 MessageBox.Show(message, "모니터 확인 필요", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 UpdateStatus(message);
-                RefreshMonitorList(selectDefaultWhenUnmatched: false);
                 return false;
             }
 
