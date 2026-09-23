@@ -18,9 +18,10 @@ namespace MonitorLauncher
                 TotalApps = workspace.Apps.Count
             };
 
+            var usedWindows = new HashSet<IntPtr>();
             foreach (var app in workspace.Apps)
             {
-                if (await RestoreAppWindowAsync(app, result))
+                if (await RestoreAppWindowAsync(app, result, usedWindows))
                 {
                     result.RestoredWindows++;
                 }
@@ -42,7 +43,7 @@ namespace MonitorLauncher
             }
 
             int movedCount = 0;
-            var allScreenBounds = GetAllScreenBounds();
+            var screens = Screen.AllScreens;
 
             Win32Api.EnumWindows((hWnd, lParam) =>
             {
@@ -57,14 +58,19 @@ namespace MonitorLauncher
                     return true;
                 }
 
-                var center = new Point(rect.Left + rect.Width / 2, rect.Top + rect.Height / 2);
-                bool isOutsideScreens = !allScreenBounds.Contains(center);
+                // A bounding union also contains gaps between physical displays.
+                var titleBounds = new Rectangle(rect.Left, rect.Top, rect.Width, Math.Min(32, rect.Height));
+                bool isOutsideScreens = !screens.Any(screen =>
+                {
+                    var visible = Rectangle.Intersect(screen.WorkingArea, titleBounds);
+                    return visible.Width >= Math.Min(120, rect.Width) && visible.Height >= 16;
+                });
                 bool hasInvalidSize = rect.Width < 120 || rect.Height < 80;
 
                 if (isOutsideScreens || hasInvalidSize)
                 {
-                    MoveWindowToSafePrimaryBounds(hWnd, primaryScreen, Math.Max(rect.Width, 800), Math.Max(rect.Height, 600), false);
-                    movedCount++;
+                    if (MoveWindowToSafePrimaryBounds(hWnd, primaryScreen, Math.Max(rect.Width, 800), Math.Max(rect.Height, 600), false))
+                        movedCount++;
                 }
 
                 return true;
@@ -73,9 +79,9 @@ namespace MonitorLauncher
             return movedCount;
         }
 
-        private async Task<bool> RestoreAppWindowAsync(AppWindowProfile app, WorkspaceRestoreResult result)
+        private async Task<bool> RestoreAppWindowAsync(AppWindowProfile app, WorkspaceRestoreResult result, HashSet<IntPtr> usedWindows)
         {
-            IntPtr hWnd = FindRunningWindow(app);
+            IntPtr hWnd = FindRunningWindow(app, usedWindows);
             bool launched = false;
 
             if (hWnd == IntPtr.Zero && app.LaunchIfNotRunning)
@@ -84,7 +90,7 @@ namespace MonitorLauncher
                 if (launched)
                 {
                     result.LaunchedApps++;
-                    hWnd = await WaitForWindowAsync(app);
+                    hWnd = await WaitForWindowAsync(app, usedWindows);
                 }
             }
 
@@ -94,8 +100,16 @@ namespace MonitorLauncher
                 return false;
             }
 
-            MoveWindowToSavedBounds(hWnd, app);
-            result.Messages.Add($"{app.DisplayName}: 창 위치 복원 완료");
+            usedWindows.Add(hWnd);
+            if (!MoveWindowToSavedBounds(hWnd, app, out bool usedFallback))
+            {
+                result.Messages.Add($"{app.DisplayName}: 창 위치 이동에 실패했습니다. 창 종료 여부와 권한을 확인해주세요.");
+                return false;
+            }
+            if (usedFallback) result.FallbackWindows++;
+            result.Messages.Add(usedFallback
+                ? $"{app.DisplayName}: 저장된 모니터가 없어 주 모니터로 복원했습니다."
+                : $"{app.DisplayName}: 창 위치 복원 완료");
             return true;
         }
 
@@ -130,14 +144,14 @@ namespace MonitorLauncher
             }
         }
 
-        private static async Task<IntPtr> WaitForWindowAsync(AppWindowProfile app)
+        private static async Task<IntPtr> WaitForWindowAsync(AppWindowProfile app, HashSet<IntPtr> usedWindows)
         {
             const int maxAttempts = 50;
 
             for (int i = 0; i < maxAttempts; i++)
             {
                 await Task.Delay(100);
-                IntPtr hWnd = FindRunningWindow(app);
+                IntPtr hWnd = FindRunningWindow(app, usedWindows);
                 if (hWnd != IntPtr.Zero)
                 {
                     return hWnd;
@@ -147,14 +161,14 @@ namespace MonitorLauncher
             return IntPtr.Zero;
         }
 
-        private static IntPtr FindRunningWindow(AppWindowProfile app)
+        private static IntPtr FindRunningWindow(AppWindowProfile app, HashSet<IntPtr> usedWindows)
         {
-            var candidates = new List<(IntPtr Handle, int Area)>();
+            var candidates = new List<(IntPtr Handle, bool TitleMatches, long Area)>();
             string expectedProcessName = Path.GetFileNameWithoutExtension(app.ProcessName);
 
             Win32Api.EnumWindows((hWnd, lParam) =>
             {
-                if (!WindowCaptureService.IsGeneralVisibleWindow(hWnd))
+                if (usedWindows.Contains(hWnd) || !WindowCaptureService.IsGeneralVisibleWindow(hWnd))
                 {
                     return true;
                 }
@@ -172,6 +186,9 @@ namespace MonitorLauncher
                     {
                         return true;
                     }
+                    if (!string.IsNullOrWhiteSpace(app.ExecutablePath) &&
+                        !string.Equals(process.MainModule?.FileName, app.ExecutablePath, StringComparison.OrdinalIgnoreCase))
+                        return true;
                 }
                 catch
                 {
@@ -183,41 +200,43 @@ namespace MonitorLauncher
                     return true;
                 }
 
-                candidates.Add((hWnd, rect.Width * rect.Height));
+                candidates.Add((hWnd, string.Equals(WindowCaptureService.GetWindowTitle(hWnd), app.DisplayName,
+                    StringComparison.Ordinal), (long)rect.Width * rect.Height));
                 return true;
             }, IntPtr.Zero);
 
             return candidates
-                .OrderByDescending(candidate => candidate.Area)
+                .OrderByDescending(candidate => candidate.TitleMatches)
+                .ThenByDescending(candidate => candidate.Area)
                 .Select(candidate => candidate.Handle)
                 .FirstOrDefault();
         }
 
-        private static void MoveWindowToSavedBounds(IntPtr hWnd, AppWindowProfile app)
+        private static bool MoveWindowToSavedBounds(IntPtr hWnd, AppWindowProfile app, out bool usedFallback)
         {
             Screen? targetScreen = FindTargetScreen(app);
+            usedFallback = targetScreen == null;
             if (targetScreen == null)
             {
                 var primaryScreen = Screen.PrimaryScreen;
                 if (primaryScreen == null)
                 {
-                    return;
+                    return false;
                 }
 
-                MoveWindowToSafePrimaryBounds(hWnd, primaryScreen, app.Width, app.Height, app.IsMaximized);
-                return;
+                return MoveWindowToSafePrimaryBounds(hWnd, primaryScreen, app.Width, app.Height, app.IsMaximized);
             }
 
-            Rectangle targetBounds = targetScreen.Bounds;
-            int width = Math.Max(app.Width, 300);
-            int height = Math.Max(app.Height, 200);
+            Rectangle targetBounds = targetScreen.WorkingArea;
+            int width = Math.Min(Math.Max(app.Width, 300), targetBounds.Width);
+            int height = Math.Min(Math.Max(app.Height, 200), targetBounds.Height);
             int x = Clamp(app.X, targetBounds.Left, Math.Max(targetBounds.Right - width, targetBounds.Left));
             int y = Clamp(app.Y, targetBounds.Top, Math.Max(targetBounds.Bottom - height, targetBounds.Top));
 
-            MoveWindow(hWnd, x, y, width, height, app.IsMaximized);
+            return MoveWindow(hWnd, x, y, width, height, app.IsMaximized);
         }
 
-        private static void MoveWindowToSafePrimaryBounds(IntPtr hWnd, Screen primaryScreen, int requestedWidth, int requestedHeight, bool isMaximized)
+        private static bool MoveWindowToSafePrimaryBounds(IntPtr hWnd, Screen primaryScreen, int requestedWidth, int requestedHeight, bool isMaximized)
         {
             Rectangle bounds = primaryScreen.WorkingArea;
             int width = Math.Min(Math.Max(requestedWidth, 800), bounds.Width);
@@ -225,14 +244,14 @@ namespace MonitorLauncher
             int x = bounds.Left + (bounds.Width - width) / 2;
             int y = bounds.Top + (bounds.Height - height) / 2;
 
-            MoveWindow(hWnd, x, y, width, height, isMaximized);
+            return MoveWindow(hWnd, x, y, width, height, isMaximized);
         }
 
-        private static void MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool isMaximized)
+        private static bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool isMaximized)
         {
             Win32Api.ShowWindow(hWnd, Win32Api.SW_RESTORE);
-            Win32Api.SetWindowPos(hWnd, Win32Api.HWND_TOP, x, y, width, height,
-                Win32Api.SWP_SHOWWINDOW | Win32Api.SWP_NOACTIVATE);
+            if (!Win32Api.SetWindowPos(hWnd, Win32Api.HWND_TOP, x, y, width, height,
+                Win32Api.SWP_SHOWWINDOW | Win32Api.SWP_NOACTIVATE)) return false;
 
             if (isMaximized)
             {
@@ -242,6 +261,7 @@ namespace MonitorLauncher
             {
                 Win32Api.ShowWindow(hWnd, Win32Api.SW_SHOWNORMAL);
             }
+            return true;
         }
 
         private static Screen? FindTargetScreen(AppWindowProfile app)
@@ -255,17 +275,6 @@ namespace MonitorLauncher
             }
 
             return null;
-        }
-
-        private static Rectangle GetAllScreenBounds()
-        {
-            Rectangle bounds = Rectangle.Empty;
-            foreach (var screen in Screen.AllScreens)
-            {
-                bounds = bounds == Rectangle.Empty ? screen.Bounds : Rectangle.Union(bounds, screen.Bounds);
-            }
-
-            return bounds;
         }
 
         private static int Clamp(int value, int min, int max)
