@@ -13,13 +13,11 @@ namespace MonitorLauncher
         private static readonly HashSet<string> IgnoredProcessNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "ApplicationFrameHost",
-            "explorer",
             "MonitorLauncher",
             "ShellExperienceHost",
             "StartMenuExperienceHost",
             "SystemSettings",
-            "TextInputHost",
-            "WindowsTerminal"
+            "TextInputHost"
         };
 
         public List<CapturedWindowInfo> CaptureOpenWindows()
@@ -74,7 +72,11 @@ namespace MonitorLauncher
                 return false;
             }
 
-            if (IgnoredProcessNames.Contains(process.ProcessName))
+            using var capturedProcess = process;
+            string processName;
+            try { processName = process.ProcessName; }
+            catch { return false; }
+            if (IgnoredProcessNames.Contains(processName))
             {
                 return false;
             }
@@ -92,7 +94,7 @@ namespace MonitorLauncher
             {
                 Handle = hWnd,
                 Title = title,
-                ProcessName = process.ProcessName,
+                ProcessName = processName,
                 ExecutablePath = executablePath,
                 MonitorDeviceName = monitor?.DeviceName ?? string.Empty,
                 X = rect.Left,
@@ -110,6 +112,11 @@ namespace MonitorLauncher
             {
                 return false;
             }
+
+            var className = new StringBuilder(256);
+            Win32Api.GetClassName(hWnd, className, className.Capacity);
+            if (className.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd")
+                return false;
 
             int exStyle = Win32Api.GetWindowLong32(hWnd, Win32Api.GWL_EXSTYLE);
             if ((exStyle & Win32Api.WS_EX_TOOLWINDOW) != 0)

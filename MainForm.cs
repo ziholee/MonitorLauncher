@@ -32,6 +32,7 @@ namespace MonitorLauncher
         private Label? lblStatus;
         private List<Profile> profiles = new List<Profile>();
         private List<WorkspaceProfile> workspaceProfiles = new List<WorkspaceProfile>();
+        private bool isRestoringWorkspace;
         private string profilesFilePath = Profile.GetProfilesFilePath();
         private string workspacesFilePath = WorkspaceProfile.GetWorkspacesFilePath();
         private NotifyIcon? trayIcon;
@@ -61,12 +62,14 @@ namespace MonitorLauncher
 
         private void InitializeComponent()
         {
-            this.Text = "Monitor Launcher v2.0.0";
+            this.Text = "Monitor Launcher v2.0.1";
             this.Size = new Size(LayoutMinWidth, LayoutMinHeight);
-            this.MinimumSize = new Size(LayoutMinWidth, LayoutMinHeight);
+            this.MinimumSize = new Size(480, 360);
+            this.AutoScroll = true;
+            this.AutoScrollMinSize = new Size(960, 850);
             this.StartPosition = FormStartPosition.Manual;
-            this.FormBorderStyle = FormBorderStyle.FixedSingle;
-            this.MaximizeBox = false;
+            this.FormBorderStyle = FormBorderStyle.Sizable;
+            this.MaximizeBox = true;
             this.BackColor = Color.FromArgb(241, 243, 247);
             this.Icon = LoadApplicationIcon();
             this.Resize += MainForm_Resize;
@@ -434,7 +437,7 @@ namespace MonitorLauncher
 
             btnGatherWindows = new Button
             {
-                Text = "모든 창 주 모니터로",
+                Text = "화면 밖 창 복구",
                 Location = new Point(728, 138),
                 Size = new Size(160, 34),
                 FlatStyle = FlatStyle.Flat,
@@ -516,14 +519,14 @@ namespace MonitorLauncher
             if (!TryResolveSelectedMonitor(out var selectedScreen) || selectedScreen == null)
                 return;
 
-            var screenBounds = selectedScreen.Bounds;
+            var screenBounds = selectedScreen.WorkingArea;
 
             const int screenPadding = 80;
-            int availableWidth = Math.Max(screenBounds.Width - screenPadding, LayoutMinWidth);
-            int availableHeight = Math.Max(screenBounds.Height - screenPadding, LayoutMinHeight);
+            int availableWidth = Math.Max(screenBounds.Width - screenPadding, 1);
+            int availableHeight = Math.Max(screenBounds.Height - screenPadding, 1);
 
-            int windowWidth = Math.Max(Math.Min(availableWidth, 1180), LayoutMinWidth);
-            int windowHeight = Math.Max(Math.Min(availableHeight, 760), LayoutMinHeight);
+            int windowWidth = Math.Min(availableWidth, LayoutMinWidth);
+            int windowHeight = Math.Min(availableHeight, LayoutMinHeight);
 
             // 창을 모니터 중앙에 배치
             int windowX = screenBounds.X + (screenBounds.Width - windowWidth) / 2;
@@ -1033,6 +1036,11 @@ namespace MonitorLauncher
 
             var now = DateTime.Now;
             var existing = workspaceProfiles.FirstOrDefault(workspace => workspace.Name == workspaceName);
+            if (existing != null && MessageBox.Show(
+                $"'{workspaceName}' 워크스페이스가 이미 있습니다. 현재 선택한 배치로 덮어쓸까요?",
+                "덮어쓰기 확인", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
             var workspaceProfile = new WorkspaceProfile
             {
                 Name = workspaceName,
@@ -1051,6 +1059,7 @@ namespace MonitorLauncher
                 WorkspaceProfile.SaveWorkspaces(updatedWorkspaces, workspacesFilePath);
                 workspaceProfiles = updatedWorkspaces;
                 RefreshWorkspaceList();
+                if (lstWorkspaces != null) lstWorkspaces.SelectedItem = workspaceProfile;
                 UpdateStatus($"워크스페이스 '{workspaceProfile.Name}'이 저장되었습니다.");
             }
             catch (Exception ex)
@@ -1130,6 +1139,12 @@ namespace MonitorLauncher
 
         private async Task RestoreWorkspaceAsync(WorkspaceProfile workspace, string statusMessage)
         {
+            if (isRestoringWorkspace)
+            {
+                UpdateStatus("워크스페이스를 복원 중입니다. 완료 후 다시 실행해주세요.");
+                return;
+            }
+            isRestoringWorkspace = true;
             ToggleWorkspaceButtons(false);
             UpdateStatus(statusMessage);
 
@@ -1138,7 +1153,7 @@ namespace MonitorLauncher
                 var result = await workspaceRestoreService.RestoreAsync(workspace);
                 UpdateStatus(result.Summary);
 
-                if (result.FailedApps > 0)
+                if (result.FailedApps > 0 || result.FallbackWindows > 0)
                 {
                     MessageBox.Show(string.Join(Environment.NewLine, result.Messages), "워크스페이스 복원 결과", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
@@ -1150,12 +1165,14 @@ namespace MonitorLauncher
             }
             finally
             {
+                isRestoringWorkspace = false;
                 ToggleWorkspaceButtons(true);
             }
         }
 
         private void ToggleWorkspaceButtons(bool enabled)
         {
+            if (trayWorkspacesMenuItem != null) trayWorkspacesMenuItem.Enabled = enabled;
             if (btnLaunchWorkspace != null) btnLaunchWorkspace.Enabled = enabled;
             if (btnSaveWorkspace != null) btnSaveWorkspace.Enabled = enabled;
             if (btnDeleteWorkspace != null) btnDeleteWorkspace.Enabled = enabled;
